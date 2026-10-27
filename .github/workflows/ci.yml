@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
         python: ['3.10', '3.13']
     runs-on: ${{ matrix.os }}
     env:
@@ -38,7 +38,7 @@ jobs:
 
   # Starts a Windows exe through every supported Linux runner (real GE-Proton + umu-launcher).
   runners-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       QT_QPA_PLATFORM: offscreen
       GH_TOKEN: ${{ github.token }}
@@ -58,15 +58,17 @@ jobs:
       - name: GE-Proton
         run: |
           url=$(gh api repos/GloriousEggroll/proton-ge-custom/releases/latest \
-                --jq '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url')
+                --jq '[.assets[] | select(.name | endswith(".tar.gz"))][0].browser_download_url')
           mkdir -p "$RUNNER_TEMP/proton"
+          echo "GE-Proton: $url"
           curl -sSfL "$url" | tar -xz -C "$RUNNER_TEMP/proton"
           echo "PROTON_BIN=$(ls -d "$RUNNER_TEMP"/proton/*/proton)" >> "$GITHUB_ENV"
       - name: umu-launcher
         run: |
           url=$(gh api repos/Open-Wine-Components/umu-launcher/releases/latest \
-                --jq '.assets[] | select(.name | test("zipapp.tar$")) | .browser_download_url')
+                --jq '[.assets[] | select(.name | test("zipapp.tar$"))][0].browser_download_url')
           mkdir -p "$RUNNER_TEMP/umu"
+          echo "umu-launcher: $url"
           curl -sSfL "$url" | tar -x -C "$RUNNER_TEMP/umu"
           echo "UMU_BIN=$(find "$RUNNER_TEMP/umu" -name umu-run -type f | head -1)" >> "$GITHUB_ENV"
       - run: pip install -e .[dev]
