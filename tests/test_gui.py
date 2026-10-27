@@ -53,3 +53,38 @@ def test_play_and_update_states(qtbot, installed_game):
 def test_not_owned(qtbot):
     win = make(qtbot, FakeCore(owned=False))
     assert 'STORE' in win.game_page.primary.text()
+
+
+def test_install_then_play_flow(qtbot, monkeypatch, installed_game):
+    import subprocess
+    import sys
+    from types import SimpleNamespace
+
+    from PySide6.QtWidgets import QMessageBox
+
+
+    core = FakeCore(latest='1.1')
+    win = make(qtbot, core)
+    assert win.game_page.primary.text() == 'INSTALLIEREN'
+    monkeypatch.setattr(QMessageBox, 'question', staticmethod(lambda *a, **k: QMessageBox.Yes))
+
+    fake_plan = SimpleNamespace(download_size=10, install_size=20, warnings=['Hinweis'],
+                                igame=SimpleNamespace(install_path='/g/rl'))
+    monkeypatch.setattr(win.backend, 'prepare_install', lambda repair=False: fake_plan)
+
+    def run_install(plan, progress, cancelled):
+        progress(50.0, '50 %')
+        core.lgd.installed = installed_game  # now registered as installed (version 1.1)
+        return True
+    monkeypatch.setattr(win.backend, 'run_install', run_install)
+
+    win.game_page.primary.click()
+    qtbot.waitUntil(lambda: win.game_page.primary.text() == 'SPIELEN' and not win.busy(), timeout=5000)
+
+    win.settings.custom_runner_path = '/usr/bin/wine'
+    monkeypatch.setattr(win.backend, 'launch',
+                        lambda runner, offline=False: subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(1)']))  # noqa: E501
+    win.game_page.primary.click()
+    qtbot.waitUntil(lambda: win.game_page.primary.text() == 'LÄUFT …', timeout=5000)
+    qtbot.waitUntil(lambda: win.game_page.primary.text() == 'SPIELEN', timeout=8000)
+    assert 'beendet' in win.game_page.status.text()

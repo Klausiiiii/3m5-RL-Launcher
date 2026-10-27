@@ -216,16 +216,25 @@ class Backend:
         dlm = plan.dlm
         dlm.start()
         was_cancelled = False
+
+        def report(update: UIUpdate):
+            speed = update.download_speed / 1024 / 1024
+            progress(update.progress, f'{update.progress:.1f} %  ·  {speed:.1f} MiB/s')
+
         while dlm.is_alive():
             if cancelled() and not was_cancelled:
                 was_cancelled = True
                 self._stop_dlm(dlm)
             try:
-                update: UIUpdate = plan.status_queue.get(timeout=0.5)
+                report(plan.status_queue.get(timeout=0.5))
             except queue.Empty:
                 continue
-            speed = update.download_speed / 1024 / 1024
-            progress(update.progress, f'{update.progress:.1f} %  ·  {speed:.1f} MiB/s')
+        # drain what was sent right before exiting (an unread mp.Queue can also block the child's exit)
+        while True:
+            try:
+                report(plan.status_queue.get_nowait())
+            except queue.Empty:
+                break
         dlm.join()
 
         if was_cancelled:
