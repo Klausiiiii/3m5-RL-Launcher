@@ -36,6 +36,42 @@ jobs:
       - run: ruff check src tests packaging
       - run: pytest -v
 
+  # Starts a Windows exe through every supported Linux runner (real GE-Proton + umu-launcher).
+  runners-e2e:
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+          sudo apt-get install -y --no-install-recommends wine64
+          echo "WINE_BIN=$(dpkg -L wine64 | grep -E '/(bin|lib/wine)/wine64$' | head -1)" >> "$GITHUB_ENV"
+          # umu's Steam Runtime container needs unprivileged user namespaces
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: GE-Proton
+        run: |
+          url=$(gh api repos/GloriousEggroll/proton-ge-custom/releases/latest \
+                --jq '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url')
+          mkdir -p "$RUNNER_TEMP/proton"
+          curl -sSfL "$url" | tar -xz -C "$RUNNER_TEMP/proton"
+          echo "PROTON_BIN=$(ls -d "$RUNNER_TEMP"/proton/*/proton)" >> "$GITHUB_ENV"
+      - name: umu-launcher
+        run: |
+          url=$(gh api repos/Open-Wine-Components/umu-launcher/releases/latest \
+                --jq '.assets[] | select(.name | test("zipapp.tar$")) | .browser_download_url')
+          mkdir -p "$RUNNER_TEMP/umu"
+          curl -sSfL "$url" | tar -x -C "$RUNNER_TEMP/umu"
+          echo "UMU_BIN=$(find "$RUNNER_TEMP/umu" -name umu-run -type f | head -1)" >> "$GITHUB_ENV"
+      - run: pip install -e .[dev]
+      - run: pytest -v -rs tests/test_runner_e2e.py
+
   build:
     needs: test
     strategy:
