@@ -58,7 +58,7 @@ jobs:
       - name: GE-Proton
         run: |
           url=$(gh api repos/GloriousEggroll/proton-ge-custom/releases/latest \
-                --jq '[.assets[] | select(.name | endswith(".tar.gz"))][0].browser_download_url')
+                --jq '[.assets[] | select((.name | endswith(".tar.gz")) and (.name | contains("aarch64") | not))][0].browser_download_url')
           mkdir -p "$RUNNER_TEMP/proton"
           echo "GE-Proton: $url"
           curl -sSfL "$url" | tar -xz -C "$RUNNER_TEMP/proton"
