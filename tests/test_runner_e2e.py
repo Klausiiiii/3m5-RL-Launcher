@@ -21,6 +21,8 @@ _WINE_CANDIDATES = (shutil.which('wine'), shutil.which('wine64'), '/usr/lib/wine
 WINE_BIN = os.environ.get('WINE_BIN') or next((p for p in _WINE_CANDIDATES if p and os.path.exists(p)), None)
 PROTON_BIN = os.environ.get('PROTON_BIN')
 UMU_BIN = os.environ.get('UMU_BIN') or shutil.which('umu-run')
+# first umu run downloads the Steam Runtime, so allow some minutes
+LAUNCH_TIMEOUT = int(os.environ.get('LAUNCH_TIMEOUT', '420'))
 
 
 def _seed_core(install_dir: str):
@@ -48,17 +50,34 @@ def _proton_cmd_dir(proton_script: str) -> str:
 
 
 def _launch(runner: Runner, install_dir: str, prefix_root: str) -> int:
+    """Start via the exact command/env the launcher builds; output is captured so CI shows why it fails."""
     from rl_launcher.backend import Backend
     from rl_launcher.settings import Settings
 
     backend = Backend(Settings(prefix_root=prefix_root), _seed_core(install_dir))
-    return backend.launch(runner, offline=True).wait(timeout=900)
+    cmd, cwd, env = backend.build_launch(runner, offline=True)
+    # files instead of pipes: wineserver outlives the game and would keep a pipe open
+    log = os.path.join(prefix_root, f'{runner.kind}.log')
+    os.makedirs(prefix_root, exist_ok=True)
+    with open(log, 'w') as f:
+        proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=f, stderr=subprocess.STDOUT)
+        try:
+            code = proc.wait(timeout=LAUNCH_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            code = None
+    with open(log, errors='replace') as f:
+        output = f.read()[-6000:]
+    print(output)
+    assert code is not None, f'{runner.kind} did not exit within {LAUNCH_TIMEOUT}s:\n{output}'
+    return code
 
 
 @pytest.fixture(autouse=True)
 def _env(tmp_path, monkeypatch):
     monkeypatch.setenv('LEGENDARY_CONFIG_PATH', str(tmp_path / 'legendary'))
     monkeypatch.setenv('WINEDEBUG', '-all')
+    monkeypatch.setenv('UMU_LOG', '1')
 
 
 @pytest.mark.skipif(not WINE_BIN, reason='needs Wine')

@@ -30,7 +30,7 @@ jobs:
       - name: Wine (for the end-to-end launch test)
         if: runner.os == 'Linux' && matrix.python == '3.13'
         run: |
-          sudo apt-get install -y --no-install-recommends wine64
+          sudo apt-get install -y --no-install-recommends wine64 xvfb
           echo "WINE_BIN=$(dpkg -L wine64 | grep -E '/(bin|lib/wine)/wine64$' | head -1)" >> "$GITHUB_ENV"
       - run: pip install -e .[dev]
       - run: ruff check src tests packaging
@@ -39,6 +39,7 @@ jobs:
   # Starts a Windows exe through every supported Linux runner (real GE-Proton + umu-launcher).
   runners-e2e:
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     env:
       QT_QPA_PLATFORM: offscreen
       GH_TOKEN: ${{ github.token }}
@@ -51,7 +52,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
-          sudo apt-get install -y --no-install-recommends wine64
+          sudo apt-get install -y --no-install-recommends wine64 xvfb
           echo "WINE_BIN=$(dpkg -L wine64 | grep -E '/(bin|lib/wine)/wine64$' | head -1)" >> "$GITHUB_ENV"
           # umu's Steam Runtime container needs unprivileged user namespaces
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
@@ -72,7 +73,7 @@ jobs:
           curl -sSfL "$url" | tar -x -C "$RUNNER_TEMP/umu"
           echo "UMU_BIN=$(find "$RUNNER_TEMP/umu" -name umu-run -type f | head -1)" >> "$GITHUB_ENV"
       - run: pip install -e .[dev]
-      - run: pytest -v -rs tests/test_runner_e2e.py
+      - run: xvfb-run -a pytest -v -rs -s tests/test_runner_e2e.py
 
   build:
     needs: test
