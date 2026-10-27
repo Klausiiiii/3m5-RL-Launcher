@@ -27,6 +27,9 @@ jobs:
       - name: Qt system libraries
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - name: Wine (for the end-to-end launch test)
+        if: runner.os == 'Linux' && matrix.python == '3.13'
+        run: sudo apt-get install -y --no-install-recommends wine64
       - run: pip install -e .[dev]
       - run: ruff check src tests packaging
       - run: pytest -v
