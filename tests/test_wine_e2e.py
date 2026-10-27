@@ -10,7 +10,9 @@ import sys
 
 import pytest
 
-WINE = next((p for p in (shutil.which('wine'), '/usr/lib/wine/wine64') if p and os.path.exists(p)), None)
+# CI sets WINE_BIN explicitly so the test can never be skipped silently there
+_CANDIDATES = (shutil.which('wine'), shutil.which('wine64'), '/usr/lib/wine/wine64')
+WINE = os.environ.get('WINE_BIN') or next((p for p in _CANDIDATES if p and os.path.exists(p)), None)
 pytestmark = pytest.mark.skipif(sys.platform == 'win32' or not WINE, reason='needs Wine on Linux')
 
 
