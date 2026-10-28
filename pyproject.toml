@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -20,8 +20,10 @@ dev = ["pytest>=8", "pytest-qt>=4", "pyinstaller>=6", "ruff"]
 [project.scripts]
 3m5-rl-launcher = "rl_launcher.__main__:main"
 
-[tool.setuptools.dynamic]
-version = {attr = "rl_launcher.__version__"}
+# version comes from the git tag (v0.1.1 -> 0.1.1), untagged commits get a .devN suffix
+[tool.setuptools_scm]
+version_file = "src/rl_launcher/_version.py"
+fallback_version = "0.0.0"
 
 [tool.setuptools.packages.find]
 where = ["src"]

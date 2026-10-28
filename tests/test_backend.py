@@ -10,13 +10,14 @@ from rl_launcher.settings import Settings
     ('abc123', 'abc123'),
     ('  "abc123"  ', 'abc123'),
     ('{"redirectUrl":"x","authorizationCode":"abc123","sid":null}', 'abc123'),
+    ('{"warning":"Do not share","redirectUrl":"https://localhost/launcher/authorized?code=abc123"}', 'abc123'),
     ('https://localhost/launcher/authorized?code=abc123', 'abc123'),
 ])
 def test_parse_auth_code(text, expected):
     assert parse_auth_code(text) == expected
 
 
-@pytest.mark.parametrize('text', ['', '{"authorizationCode": null}', '{broken', 'https://x/?foo=1'])
+@pytest.mark.parametrize('text', ['', '{"authorizationCode": null}', '{"redirectUrl": "https://x/"}', '{broken', 'https://x/?foo=1'])
 def test_parse_auth_code_invalid(text):
     with pytest.raises(LauncherError):
         parse_auth_code(text)
