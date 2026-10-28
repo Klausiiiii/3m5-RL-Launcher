@@ -31,6 +31,8 @@ log = logging.getLogger('rl_launcher.backend')
 
 RL_APP_NAME = 'Sugar'  # Epic's internal app name for Rocket League
 RL_TITLE = 'Rocket League'
+RL_FOLDER = 'rocketleague'  # folder name Epic uses for the install
+RL_EXE = 'Binaries/Win64/RocketLeague.exe'
 LOGIN_URL = 'https://legendary.gl/epiclogin'
 STORE_URL = 'https://store.epicgames.com/p/rocket-league'
 
@@ -277,7 +279,7 @@ class Backend:
                 log.warning(f'Prerequisite installer failed: {e!r}')
         self.core.prereq_installed(igame.app_name)
 
-    def verify(self, progress: ProgressCallback) -> tuple[int, int]:
+    def verify(self, progress: ProgressCallback, cancelled: Callable[[], bool] = lambda: False) -> tuple[int, int]:
         """Check all files and write Legendary's repair file. Returns (corrupted, missing)."""
         igame = self.core.get_installed_game(self.app_name)
         if not igame:
@@ -302,6 +304,8 @@ class Backend:
         repair = []
         last = 0.0
         for result, path, result_hash, read in validate_files(igame.install_path, files, case_insensitive=True):
+            if cancelled():
+                raise LauncherError('Prüfung abgebrochen. „PRÜFEN“ startet sie erneut.')
             done += read
             if result in (VerifyResult.HASH_MATCH, VerifyResult.HASH_MISMATCH):
                 repair.append(f'{result_hash}:{path}')
@@ -313,23 +317,69 @@ class Backend:
                 last = time.monotonic()
                 progress(done / total * 100, f'Prüfe Dateien … {done / total * 100:.1f} %')
 
-        with open(os.path.join(self.core.lgd.get_tmp_path(), f'{self.app_name}.repair'), 'w',
-                  encoding='utf-8') as f:
-            f.write('\n'.join(repair))
+        repair_file = os.path.join(self.core.lgd.get_tmp_path(), f'{self.app_name}.repair')
+        if bad or missing:
+            # Legendary's repair mode re-downloads everything not listed as matching in this file
+            with open(repair_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(repair))
+        else:
+            igame.needs_verification = False
+            self.core.install_game(igame)
+            if os.path.exists(repair_file):
+                os.remove(repair_file)
+        progress(100, 'Prüfung abgeschlossen')
         return bad, missing
 
-    def import_install(self, path: str):
-        """Register an existing Rocket League folder (e.g. from the Epic Games Launcher)."""
+    def find_existing_installs(self) -> list[str]:
+        """Rocket League folders found on this machine (Epic Games Launcher, Heroic, Lutris, defaults)."""
+        candidates = []
+        try:
+            for m in self.core.egl.get_manifests():
+                if m.app_name == self.app_name and m.install_location:
+                    candidates.append(m.install_location)
+        except Exception as e:  # noqa: BLE001 - EGL not installed / unreadable manifests
+            log.debug('Reading EGL manifests failed: %r', e)
+
+        home = os.path.expanduser('~')
+        if sys.platform == 'win32':
+            for env in ('ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432'):
+                if base := os.environ.get(env):
+                    candidates.append(os.path.join(base, 'Epic Games', RL_FOLDER))
+            candidates += [f'{d}:\\Epic Games\\{RL_FOLDER}' for d in 'CDEFG']
+        else:
+            candidates += [
+                os.path.join(home, 'Games', 'Heroic', RL_FOLDER),
+                os.path.join(home, 'Games', 'epic-games-store', 'drive_c', 'Program Files', 'Epic Games', RL_FOLDER),
+            ]
+        candidates.append(os.path.join(self.settings.install_base, RL_FOLDER))
+
+        found = []
+        for c in candidates:
+            path = find_rl_folder(c)
+            if path and os.path.normcase(path) not in map(os.path.normcase, found):
+                found.append(path)
+        return found
+
+    def import_install(self, path: str) -> str:
+        """Register an existing Rocket League folder (e.g. from the Epic Games Launcher).
+
+        ``path`` may be the game folder itself, its parent ("Epic Games") or a folder inside it.
+        Returns the resolved game folder. Run :meth:`verify` afterwards.
+        """
         self._lock()
+        resolved = find_rl_folder(path)
+        if not resolved:
+            raise LauncherError(f'In "{path}" wurde kein Rocket League gefunden '
+                                f'(erwartet: …/{RL_FOLDER}/{RL_EXE.replace("/", os.sep)}).')
         game = self._require_game()
-        path = os.path.abspath(path)
-        manifest, igame = self.core.import_game(game, path)
-        exe = os.path.join(path, manifest.meta.launch_exe.lstrip('/'))
+        manifest, igame = self.core.import_game(game, resolved)
+        exe = os.path.join(resolved, manifest.meta.launch_exe.lstrip('/'))
         if not _exists_case_insensitive(exe):
-            folder = game.metadata.get('customAttributes', {}).get('FolderName', {}).get('value', '')
-            hint = f' Meintest du "{os.path.join(path, folder)}"?' if folder else ''
-            raise LauncherError(f'In "{path}" wurde kein Rocket League gefunden.{hint}')
+            raise LauncherError(f'In "{resolved}" fehlt {manifest.meta.launch_exe}.')
+        # always verify imported files - we cannot know what another launcher left behind
+        igame.needs_verification = True
         self.core.install_game(igame)
+        return resolved
 
     def uninstall(self):
         self._lock()
@@ -378,10 +428,32 @@ def _redact(cmd: list[str]) -> list[str]:
     return ['-AUTH_PASSWORD=***' if c.startswith('-AUTH_PASSWORD=') else c for c in cmd]
 
 
+def find_rl_folder(path: str) -> str | None:
+    """Resolve a user-picked folder to the Rocket League game folder, or None.
+
+    Accepts the game folder, its parent (e.g. "Epic Games") or a folder below it (e.g. "Binaries/Win64").
+    """
+    if not path:
+        return None
+    path = os.path.abspath(path)
+    candidates = [path, os.path.join(path, RL_FOLDER)]
+    parent = path
+    for _ in range(3):  # e.g. picked .../rocketleague/Binaries/Win64
+        parent = os.path.dirname(parent)
+        candidates.append(parent)
+    for c in candidates:
+        if os.path.isdir(c) and _exists_case_insensitive(os.path.join(c, RL_EXE)):
+            return c
+    return None
+
+
 def _exists_case_insensitive(path: str) -> bool:
     if os.path.exists(path):
         return True
     if sys.platform == 'win32':
         return False
     from legendary.lfs.wine_helpers import case_insensitive_file_search
-    return os.path.exists(case_insensitive_file_search(path))
+    try:
+        return os.path.exists(case_insensitive_file_search(path))
+    except OSError:  # unreadable directory on the way
+        return False

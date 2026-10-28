@@ -10,7 +10,7 @@ Spielstart mit Epic-Auth). Läuft unter **Windows** und **Linux**.
 
 - Epic-Login (Browser + Code einfügen) oder Übernahme der Anmeldung aus einem installierten Epic Games Launcher
 - Rocket League installieren, aktualisieren, reparieren (Dateiprüfung) und deinstallieren
-- Vorhandene Installation (z. B. aus dem Epic Games Launcher) importieren statt neu laden
+- Vorhandene Installation (z. B. aus dem Epic Games Launcher) übernehmen: Ordner wählen oder automatisch finden, Dateien prüfen, nur Fehlendes nachladen
 - Download mit Fortschritt, Abbrechen und Fortsetzen
 - Update-Prüfung vor jedem Start
 - **Linux:** erkennt automatisch umu-launcher, GE-Proton / Proton (Steam) oder System-Wine und nutzt ein
@@ -49,7 +49,16 @@ Für den Qt-Build unter X11 wird ggf. `libxcb-cursor0` benötigt (`sudo apt inst
 
 1. Starten → **Epic-Login im Browser öffnen** → anmelden.
 2. Auf der angezeigten JSON-Seite den Wert von `authorizationCode` (oder die ganze Seite) kopieren und einfügen.
-3. **INSTALLIEREN** (oder *Vorhandene Installation importieren*) → **SPIELEN**.
+3. **INSTALLIEREN** → **SPIELEN**.
+
+### Schon über Epic installiert?
+
+**Vorhandene Installation wählen** statt *INSTALLIEREN*: Der Launcher schlägt eine gefundene Installation vor
+(Epic Games Launcher, Heroic, Lutris) oder du wählst den Ordner selbst – egal ob `Epic Games`, `rocketleague` oder
+`Binaries/Win64`. Danach werden alle Dateien geprüft (Verify); nur beschädigte oder fehlende Dateien werden
+nachgeladen, nichts wird neu installiert. Ist eine neuere Version verfügbar, erscheint anschließend **UPDATE**.
+Den Epic Games Launcher kannst du danach deinstallieren – **aber nicht das Spiel darüber**, sonst löscht er die
+Dateien.
 
 Rocket League muss in deiner Epic-Bibliothek sein. Falls nicht: im Epic Store kostenlos hinzufügen, dann *Neu laden*.
 
