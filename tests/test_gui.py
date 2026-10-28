@@ -1,3 +1,6 @@
+import os
+import sys
+
 import pytest
 
 pytest.importorskip('PySide6')
@@ -123,3 +126,23 @@ def test_import_existing_install_runs_verify(qtbot, monkeypatch, installed_game,
         assert 'nachgeladen' in win.game_page.status.text()
     else:
         assert confirmed == [] and win.game_page.primary.text() == 'SPIELEN'
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason='Linux only')
+def test_settings_install_ge_proton(qtbot, monkeypatch, tmp_path):
+    from rl_launcher import gui
+    from rl_launcher.runners import own_proton_dir
+
+    def fake_install(report, cancelled):
+        os.makedirs(os.path.join(own_proton_dir(), 'GE-Proton10-3'))
+        open(os.path.join(own_proton_dir(), 'GE-Proton10-3', 'proton'), 'w').close()
+        return 'GE-Proton10-3'
+    monkeypatch.setattr(gui, 'install_ge_proton', fake_install)
+
+    dlg = gui.SettingsDialog(Settings(), [])
+    qtbot.addWidget(dlg)
+    dlg.ge_btn.click()
+    qtbot.waitUntil(lambda: dlg.ge_btn.isEnabled(), timeout=5000)
+    assert dlg.runner.currentText() == 'GE-Proton10-3'
+    dlg.apply()
+    assert dlg.settings.runner.startswith('proton:')

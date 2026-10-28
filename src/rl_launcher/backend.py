@@ -421,7 +421,7 @@ class Backend:
         if runner and runner.kind == WINE and wine_mono_missing(self.settings.prefix_root):
             pfx = os.path.join(self.settings.prefix_root, 'pfx')
             raise LauncherError(f'Wine Mono fehlt im Prefix {pfx} – ohne startet Rocket League nicht. '
-                                'Installiere es (siehe README, „System-Wine“) oder nimm GE-Proton/umu.')
+                                'Installiere es unter Einstellungen → „Wine Mono installieren“ oder nimm GE-Proton.')
         cmd, cwd, env = self.build_launch(runner, offline)
         log.info('Launching: %s', shlex.join(_redact(cmd)))
         kwargs = {}
