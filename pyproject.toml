@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "3m5-rl-launcher"
+dynamic = ["version"]
+description = "3m5 Rocket League Launcher - Epic Games Launcher replacement built on Legendary"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = [
+    "legendary-gl>=0.20.34",
+    "PySide6-Essentials>=6.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-qt>=4", "pyinstaller>=6", "ruff"]
+
+[project.scripts]
+3m5-rl-launcher = "rl_launcher.__main__:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "rl_launcher.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rl_launcher = ["assets/*.svg", "assets/fonts/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "E", "B", "I"]
