@@ -172,18 +172,21 @@ class GamePage(QWidget):
         self.status = QLabel('', objectName='status')
         self.status.setWordWrap(True)
 
+        self.import_btn = QPushButton('Vorhandene Installation wählen')
+        self.import_btn.setToolTip('Rocket League ist schon installiert (z. B. über den Epic Games Launcher)? '
+                                   'Ordner wählen – die Dateien werden nur geprüft, nicht neu geladen.')
         action_row = QHBoxLayout()
         action_row.addWidget(self.primary)
+        action_row.addWidget(self.import_btn)
         action_row.addWidget(self.cancel)
         action_row.addStretch()
 
         self.repair = QPushButton('Reparieren')
-        self.import_btn = QPushButton('Vorhandene Installation importieren')
         self.open_dir = QPushButton('Spielordner öffnen')
         self.reload = QPushButton('Neu laden')
         self.uninstall = QPushButton('Deinstallieren', objectName='danger')
         tools = QHBoxLayout()
-        for b in (self.reload, self.repair, self.import_btn, self.open_dir):
+        for b in (self.reload, self.repair, self.open_dir):
             tools.addWidget(b)
         tools.addStretch()
         tools.addWidget(self.uninstall)
@@ -451,7 +454,9 @@ class MainWindow(QMainWindow):
                               'füge es im Store hinzu und klicke danach auf „Neu laden“.')
         elif not s.installed:
             gp.primary.setText('INSTALLIEREN')
-        elif s.update_available or s.needs_verification:
+        elif s.needs_verification:
+            gp.primary.setText('PRÜFEN')
+        elif s.update_available:
             gp.primary.setText('UPDATE')
         else:
             gp.primary.setText('SPIELEN')
@@ -503,11 +508,16 @@ class MainWindow(QMainWindow):
     def do_install(self, repair: bool = False):
         def prepare(w: Worker):
             if repair:
-                bad, missing = self.backend.verify(w.report)
+                bad, missing = self.backend.verify(w.report, w.cancelled)
                 log.info('Verification: %d corrupted, %d missing', bad, missing)
+                if not bad and not missing:
+                    # files are intact: a normal (delta) update is far cheaper than repair mode, which
+                    # re-downloads every file that differs from the latest version in full
+                    w.report(0, 'Dateien in Ordnung – suche nach Updates …')
+                    return self.backend.prepare_install(repair=False)
             w.report(0, 'Bereite Download vor …')
             return self.backend.prepare_install(repair=repair)
-        self.run_task(prepare, self._confirm_install, show_progress=repair, label='Bereite vor …')
+        self.run_task(prepare, self._confirm_install, cancellable=repair, label='Bereite vor …')
 
     def _confirm_install(self, plan):
         if plan is None:
@@ -536,11 +546,44 @@ class MainWindow(QMainWindow):
         self.do_install(repair=True)
 
     def do_import(self):
-        path = QFileDialog.getExistingDirectory(self, 'Rocket-League-Ordner wählen (enthält "Binaries")')
+        path = self._pick_install_dir()
         if not path:
             return
-        self.run_task(lambda w: self.backend.import_install(path), lambda _: self.refresh(),
-                      label='Importiere …')
+
+        def work(w: Worker):
+            folder = self.backend.import_install(path)
+            w.report(0, f'Prüfe Dateien in {folder} …')
+            bad, missing = self.backend.verify(w.report, w.cancelled)
+            log.info('Imported %s: %d corrupted, %d missing', folder, bad, missing)
+            plan = self.backend.prepare_install(repair=True) if bad or missing else None
+            return folder, bad, missing, plan
+
+        def done(result):
+            folder, bad, missing, plan = result
+            if not bad and not missing:
+                self.game_page.status.setText(f'Installation übernommen: {folder} – alle Dateien sind in Ordnung.')
+                self.refresh()
+                return
+            self.game_page.status.setText(f'{bad} Datei(en) beschädigt, {missing} fehlen – werden nachgeladen.')
+            self._confirm_install(plan)
+        self.run_task(work, done, cancellable=True, label='Übernehme Installation …')
+
+    def _pick_install_dir(self) -> str:
+        found = self.backend.find_existing_installs()
+        if found:
+            box = QMessageBox(QMessageBox.Question, 'Installation gefunden',
+                              f'Rocket League gefunden in:\n{found[0]}\n\nDiese Installation verwenden?', parent=self)
+            use = box.addButton('Verwenden', QMessageBox.AcceptRole)
+            other = box.addButton('Anderen Ordner wählen …', QMessageBox.ActionRole)
+            box.addButton('Abbrechen', QMessageBox.RejectRole)
+            box.exec()
+            if box.clickedButton() is use:
+                return found[0]
+            if box.clickedButton() is not other:
+                return ''
+        start = os.path.dirname(found[0]) if found else self.settings.install_base
+        return QFileDialog.getExistingDirectory(self, 'Rocket-League-Ordner wählen (z. B. …/Epic Games/rocketleague)',
+                                                start)
 
     def do_uninstall(self):
         if QMessageBox.question(self, 'Deinstallieren',

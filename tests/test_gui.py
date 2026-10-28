@@ -88,3 +88,38 @@ def test_install_then_play_flow(qtbot, monkeypatch, installed_game):
     qtbot.waitUntil(lambda: win.game_page.primary.text() == 'LÄUFT …', timeout=5000)
     qtbot.waitUntil(lambda: win.game_page.primary.text() == 'SPIELEN', timeout=8000)
     assert 'beendet' in win.game_page.status.text()
+
+
+@pytest.mark.parametrize('broken', [False, True])
+def test_import_existing_install_runs_verify(qtbot, monkeypatch, installed_game, broken):
+    core = FakeCore(latest='1.1')
+    win = make(qtbot, core)
+    assert not win.game_page.import_btn.isHidden()
+    calls = []
+
+    def import_install(path):
+        calls.append(('import', path))
+        core.lgd.installed = installed_game
+        return '/games/rocketleague'
+
+    def verify(progress, cancelled):
+        calls.append('verify')
+        progress(100, 'ok')
+        return (2, 1) if broken else (0, 0)
+
+    monkeypatch.setattr(win, '_pick_install_dir', lambda: '/games')
+    monkeypatch.setattr(win.backend, 'import_install', import_install)
+    monkeypatch.setattr(win.backend, 'verify', verify)
+    monkeypatch.setattr(win.backend, 'prepare_install', lambda repair=False: calls.append(('plan', repair)) or 'PLAN')
+    confirmed = []
+    monkeypatch.setattr(win, '_confirm_install', confirmed.append)
+
+    win.game_page.import_btn.click()
+    qtbot.waitUntil(lambda: not win.busy() and ('verify' in calls), timeout=5000)
+    qtbot.waitUntil(lambda: not win.busy(), timeout=5000)
+    assert calls[:2] == [('import', '/games'), 'verify']
+    if broken:
+        assert ('plan', True) in calls and confirmed == ['PLAN']
+        assert 'nachgeladen' in win.game_page.status.text()
+    else:
+        assert confirmed == [] and win.game_page.primary.text() == 'SPIELEN'
