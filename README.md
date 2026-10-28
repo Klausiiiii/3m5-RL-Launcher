@@ -22,8 +22,8 @@ Spielstart mit Epic-Auth). Läuft unter **Windows** und **Linux**.
 
 Unter *Actions → CI → Artifacts* (bzw. bei Tags unter *Releases*):
 
-- `3m5-rl-launcher-windows.exe` – einfach starten
-- `3m5-rl-launcher-linux-x86_64` – `chmod +x` und starten
+- `3m5-rl-launcher-<version>-windows.exe` – einfach starten
+- `3m5-rl-launcher-<version>-linux-x86_64.tar.gz` – entpacken (`tar -xzf …`) und `3m5-rl-launcher` starten
 
 ### Aus dem Quellcode
 
