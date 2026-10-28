@@ -81,8 +81,8 @@ class InstallPlan:
 def parse_auth_code(text: str) -> str:
     """Extract the authorization code from whatever the user pasted.
 
-    Accepts the raw code, the JSON shown by Epic (``{"authorizationCode": "..."}``)
-    or a URL containing ``code=``.
+    Accepts the raw code, the JSON shown by Epic (``{"authorizationCode": "..."}`` or, in newer
+    responses, only ``{"redirectUrl": "...?code=..."}``) or a URL containing ``code=``.
     """
     text = text.strip().strip('"\'')
     if not text:
@@ -92,16 +92,20 @@ def parse_auth_code(text: str) -> str:
             data = json.loads(text)
         except ValueError:
             raise LauncherError('Eingefügtes JSON ist ungültig.') from None
-        code = data.get('authorizationCode')
+        code = data.get('authorizationCode') or _code_from_url(data.get('redirectUrl') or '')
         if not code:
             raise LauncherError('Im JSON fehlt "authorizationCode" – bist du eingeloggt?')
         return code
     if text.startswith('http'):
-        code = parse_qs(urlparse(text).query).get('code', [''])[0]
+        code = _code_from_url(text)
         if not code:
             raise LauncherError('Die URL enthält keinen Code.')
         return code
     return text
+
+
+def _code_from_url(url: str) -> str:
+    return parse_qs(urlparse(url).query).get('code', [''])[0]
 
 
 class Backend:
