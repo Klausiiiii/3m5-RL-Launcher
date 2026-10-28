@@ -15,6 +15,8 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 
+from .settings import data_dir
+
 # Rocket League's Steam app id - used by umu/protonfixes to apply game specific fixes.
 RL_STEAM_APP_ID = '252950'
 
@@ -66,6 +68,12 @@ class Runner:
         raise ValueError(f'Unknown runner kind: {self.kind}')
 
 
+def wine_mono_missing(prefix_root: str) -> bool:
+    """True if the shared prefix has no Wine Mono. Rocket League's Launcher.exe is a .NET app and dies
+    with exit code 255 without it; Proton ships its own, plain distro Wine often does not."""
+    return not os.path.isdir(os.path.join(prefix_root, 'pfx', 'drive_c', 'windows', 'mono'))
+
+
 def _steam_roots() -> list[str]:
     home = os.path.expanduser('~')
     return [
@@ -83,10 +91,16 @@ def find_steam_root() -> str | None:
     return None
 
 
+def own_proton_dir() -> str:
+    """Where the launcher installs GE-Proton itself (see tools.install_ge_proton)."""
+    return os.path.join(data_dir(), 'compatibilitytools.d')
+
+
 def find_proton_builds() -> list[Runner]:
     """Find Proton builds; GE-Proton (compatibilitytools.d) first, newest name first."""
     seen = set()
-    custom, valve = [], []
+    custom = glob.glob(os.path.join(own_proton_dir(), '*', 'proton'))
+    valve = []
     for root in _steam_roots():
         for script in glob.glob(os.path.join(root, 'compatibilitytools.d', '*', 'proton')):
             custom.append(script)

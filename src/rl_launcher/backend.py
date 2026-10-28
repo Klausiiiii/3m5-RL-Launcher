@@ -24,7 +24,7 @@ from legendary.models.downloading import AnalysisResult, UIUpdate
 from legendary.models.exceptions import InvalidCredentialsError
 from legendary.models.game import Game, InstalledGame, VerifyResult
 
-from .runners import Runner
+from .runners import WINE, Runner, wine_mono_missing
 from .settings import Settings
 
 log = logging.getLogger('rl_launcher.backend')
@@ -418,6 +418,10 @@ class Backend:
         return cmd, params.working_directory, env
 
     def launch(self, runner: Runner | None, offline: bool = False) -> subprocess.Popen:
+        if runner and runner.kind == WINE and wine_mono_missing(self.settings.prefix_root):
+            pfx = os.path.join(self.settings.prefix_root, 'pfx')
+            raise LauncherError(f'Wine Mono fehlt im Prefix {pfx} – ohne startet Rocket League nicht. '
+                                'Installiere es unter Einstellungen → „Wine Mono installieren“ oder nimm GE-Proton.')
         cmd, cwd, env = self.build_launch(runner, offline)
         log.info('Launching: %s', shlex.join(_redact(cmd)))
         kwargs = {}

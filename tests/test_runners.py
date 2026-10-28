@@ -58,3 +58,9 @@ def test_select_runner():
     assert select_runner([a, b], runner_id(b)) is b
     assert select_runner([a, b], 'gone') is a
     assert select_runner([], '') is None
+
+
+def test_wine_mono_missing(tmp_path):
+    assert runners.wine_mono_missing(str(tmp_path))
+    (tmp_path / 'pfx' / 'drive_c' / 'windows' / 'mono').mkdir(parents=True)
+    assert not runners.wine_mono_missing(str(tmp_path))

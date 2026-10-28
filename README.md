@@ -38,8 +38,17 @@ Rocket League ist ein Windows-Spiel, du brauchst eine Kompatibilitätsschicht. E
 
 1. **[umu-launcher](https://github.com/Open-Wine-Components/umu-launcher)** (`umu-run`) – lädt GE-Proton
    automatisch und wendet Rocket-League-Fixes an. Beste Wahl.
-2. **GE-Proton** in `~/.steam/root/compatibilitytools.d/` oder Valve-Proton aus Steam.
-3. **System-Wine** (mit DXVK für brauchbare Performance).
+2. **GE-Proton** in `~/.steam/root/compatibilitytools.d/` oder Valve-Proton aus Steam – oder per
+   *Einstellungen → GE-Proton installieren* (neueste Version, ohne Root, nach
+   `~/.local/share/3m5-rl-launcher/compatibilitytools.d/`).
+3. **System-Wine** (mit DXVK für brauchbare Performance). Braucht **Wine Mono** im Prefix, sonst bricht
+   Rocket Leagues `Launcher.exe` (.NET) mit Code 255 ab. Am einfachsten über
+   *Einstellungen → Wine Mono installieren* (erkennt die passende Version). Manuell: Version passend zur Wine-Version
+   ([Tabelle](https://gitlab.winehq.org/wine/wine/-/wikis/Wine-Mono#versions), z. B. Wine 10.0 → 9.4.0):
+   ```bash
+   curl -fLo /tmp/wine-mono.msi https://dl.winehq.org/wine/wine-mono/9.4.0/wine-mono-9.4.0-x86.msi
+   WINEPREFIX=~/.local/share/3m5-rl-launcher/prefix/pfx wine msiexec /i /tmp/wine-mono.msi /qn
+   ```
 
 Auswahl oder eigener Pfad: *Einstellungen → Wine / Proton*.
 

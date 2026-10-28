@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sys
 import traceback
 import webbrowser
@@ -35,6 +36,7 @@ from . import __version__, theme
 from .backend import LOGIN_URL, RL_TITLE, STORE_URL, Backend, GameState, LauncherError
 from .runners import PROTON, UMU, WINE, Runner, detect_runners, runner_id, select_runner
 from .settings import Settings, data_dir
+from .tools import install_ge_proton, install_wine_mono
 
 log = logging.getLogger('rl_launcher.gui')
 
@@ -231,6 +233,21 @@ class SettingsDialog(QDialog):
             form.addRow('Eigener Runner', self._with_browse(self.custom, file=True))
             form.addRow('Wine-Prefix', self._with_browse(self.prefix))
 
+            tools = QHBoxLayout()
+            self.ge_btn = QPushButton('GE-Proton installieren')
+            self.ge_btn.setToolTip('Neueste GE-Proton-Version (bringt Mono und DXVK mit, kein Root nötig)')
+            self.ge_btn.clicked.connect(self.install_ge_proton)
+            self.mono_btn = QPushButton('Wine Mono installieren')
+            self.mono_btn.setToolTip('Nur für System-Wine: installiert Wine Mono in den Wine-Prefix')
+            self.mono_btn.clicked.connect(self.install_wine_mono)
+            tools.addWidget(self.ge_btn)
+            tools.addWidget(self.mono_btn)
+            tools.addStretch()
+            form.addRow('Nachinstallieren', tools)
+            self.tool_status = QLabel(objectName='muted')
+            self.tool_status.setWordWrap(True)
+            form.addRow('', self.tool_status)
+
         self.launch_args = QLineEdit(settings.launch_args, placeholderText='z. B. -nomovie')
         form.addRow('Startparameter', self.launch_args)
         self.skip_update = QCheckBox('Vor dem Start nicht nach Updates suchen')
@@ -241,7 +258,8 @@ class SettingsDialog(QDialog):
         logs.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(data_dir())))
         form.addRow('', logs)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        self.worker: Worker | None = None
+        self.buttons = buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         lay = QVBoxLayout(self)
@@ -266,6 +284,59 @@ class SettingsDialog(QDialog):
         btn.clicked.connect(browse)
         row.addWidget(btn)
         return w
+
+    # ---------------------------------------------------------- tool installers
+    def _run_tool(self, fn, on_done):
+        self.ge_btn.setEnabled(False)
+        self.mono_btn.setEnabled(False)
+        self.buttons.setEnabled(False)
+        self.worker = w = Worker(fn, self)
+        w.progress.connect(lambda pct, text: self.tool_status.setText(text))
+        w.succeeded.connect(lambda res: self._tool_finished(on_done, res))
+        w.failed.connect(self._tool_failed)
+        w.start()
+
+    def _tool_finished(self, cb, res):
+        self._tools_enabled()
+        cb(res)
+
+    def _tool_failed(self, msg: str):
+        self._tools_enabled()
+        self.tool_status.setText('')
+        QMessageBox.warning(self, 'Fehler', msg)
+
+    def _tools_enabled(self):
+        self.ge_btn.setEnabled(True)
+        self.mono_btn.setEnabled(True)
+        self.buttons.setEnabled(True)
+
+    def reject(self):
+        if self.worker and self.worker.isRunning():
+            return  # keep the dialog (and its worker) alive until the install is through
+        super().reject()
+
+    def install_ge_proton(self):
+        def done(name: str):
+            runners = detect_runners()
+            self.runner.clear()
+            for r in runners:
+                self.runner.addItem(r.name, runner_id(r))
+            new = next((r for r in runners if r.kind == PROTON and r.name == name), None)
+            if new:
+                self.runner.setCurrentIndex(self.runner.findData(runner_id(new)))
+            self.tool_status.setText(f'{name} ist installiert und ausgewählt – mit „Speichern“ übernehmen.')
+        self._run_tool(lambda w: install_ge_proton(w.report, w.cancelled), done)
+
+    def install_wine_mono(self):
+        custom = self.custom.text().strip()
+        wine = custom if custom and custom_runner(custom).kind == WINE else shutil.which('wine')
+        if not wine:
+            QMessageBox.warning(self, 'Fehler', 'System-Wine nicht gefunden. Installiere es über deine '
+                                'Distribution (z. B. „sudo apt install wine“) – oder nimm GE-Proton.')
+            return
+        prefix_root = self.prefix.text().strip() or self.settings.prefix_root
+        self._run_tool(lambda w: install_wine_mono(wine, prefix_root, w.report, w.cancelled),
+                       lambda v: self.tool_status.setText(f'Wine Mono {v} ist im Prefix installiert.'))
 
     def apply(self):
         s = self.settings
