@@ -66,6 +66,12 @@ class Runner:
         raise ValueError(f'Unknown runner kind: {self.kind}')
 
 
+def wine_mono_missing(prefix_root: str) -> bool:
+    """True if the shared prefix has no Wine Mono. Rocket League's Launcher.exe is a .NET app and dies
+    with exit code 255 without it; Proton ships its own, plain distro Wine often does not."""
+    return not os.path.isdir(os.path.join(prefix_root, 'pfx', 'drive_c', 'windows', 'mono'))
+
+
 def _steam_roots() -> list[str]:
     home = os.path.expanduser('~')
     return [

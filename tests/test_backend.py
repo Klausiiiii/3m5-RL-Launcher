@@ -74,3 +74,18 @@ def test_build_launch_errors(installed_game):
         Backend(Settings(), FakeCore()).build_launch(Runner('native', 'n'))
     with pytest.raises(LauncherError, match='Wine'):
         Backend(Settings(), FakeCore(installed=installed_game)).build_launch(None)
+
+
+def test_launch_wine_requires_mono(installed_game, tmp_path, monkeypatch):
+    core = FakeCore(installed=installed_game, install_dir=installed_game.install_path)
+    backend = Backend(Settings(prefix_root=str(tmp_path)), core)
+    wine = Runner('wine', 'Wine', '/usr/bin/wine')
+    with pytest.raises(LauncherError, match='Wine Mono'):
+        backend.launch(wine)
+
+    started = []
+    monkeypatch.setattr('subprocess.Popen', lambda cmd, **kw: started.append(cmd))
+    (tmp_path / 'pfx' / 'drive_c' / 'windows' / 'mono').mkdir(parents=True)
+    backend.launch(wine)
+    backend.launch(Runner('umu', 'u', '/usr/bin/umu-run'))  # Proton brings its own Mono
+    assert len(started) == 2
