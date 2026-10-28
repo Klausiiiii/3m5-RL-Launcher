@@ -23,8 +23,24 @@ def setup_logging(debug: bool):
                         format='[%(asctime)s] %(levelname)s %(name)s: %(message)s')
 
 
+def restore_child_env(env=os.environ):
+    """Undo PyInstaller's LD_LIBRARY_PATH so child processes (browser, kde-open, Wine) use system libs.
+
+    The bootloader points it at the bundle and keeps the original in LD_LIBRARY_PATH_ORIG; our own
+    process is unaffected by changing it, the dynamic loader only reads it at startup.
+    """
+    if not getattr(sys, 'frozen', False) or sys.platform != 'linux':
+        return
+    orig = env.get('LD_LIBRARY_PATH_ORIG')
+    if orig is not None:
+        env['LD_LIBRARY_PATH'] = orig
+    else:
+        env.pop('LD_LIBRARY_PATH', None)
+
+
 def main(argv: list[str] | None = None) -> int:
     multiprocessing.freeze_support()
+    restore_child_env()
     # windowed PyInstaller builds have no console; keep print()/argparse from crashing
     sys.stdout = sys.stdout or open(os.devnull, 'w')
     # Legendary's downloader is a multiprocessing.Process. Use "spawn" everywhere so Linux behaves like
